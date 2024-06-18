@@ -1,126 +1,130 @@
 // Uncomment this block to pass the first stage
 use std::{
     fmt::format,
-    io::{BufRead, BufReader, Read, Write},
-    net::{Shutdown, TcpListener},
+    // io::{BufRead, BufReader, Read, Write},
+    // net::{Shutdown, TcpListener},
     str::FromStr,
     time::Duration,
 };
 
 use http::{header::CONTENT_TYPE, HeaderName, HeaderValue};
-use nom::AsBytes;
+// use nom::AsBytes;
 use objects::{HeaderMap, Request};
+use tokio::{io::BufReader, net::TcpListener};
 mod error;
 mod objects;
 
-fn main() {
-    // You can use print statements as follows for debugging, they'll be visible when running tests.
-    println!("Logs from your program will appear here!");
+use tokio::io::{AsyncBufRead, AsyncWriteExt, BufStream}; 
+use tokio::io::AsyncBufReadExt; 
 
-    let listener: TcpListener = TcpListener::bind("127.0.0.1:4221").unwrap();
+// fn main() {
+//     // You can use print statements as follows for debugging, they'll be visible when running tests.
+//     println!("Logs from your program will appear here!");
 
-    let mut buf = String::with_capacity(1024);
-    let mut byte_buf: Vec<u8> = Vec::with_capacity(1024);
+//     let listener: TcpListener = TcpListener::bind("127.0.0.1:4221").unwrap();
 
-    'listener: for stream in listener.incoming() {
-        byte_buf.clear();
-        buf.clear();
+//     let mut buf = String::with_capacity(1024);
+//     let mut byte_buf: Vec<u8> = Vec::with_capacity(1024);
 
-        let mut data_response = http::Response::new(" ".to_string());
-        let err_response = http::Response::builder()
-            .status(404)
-            .body("Invalid request".to_string())
-            .unwrap();
+//     'listener: for stream in listener.incoming() {
+//         byte_buf.clear();
+//         buf.clear();
 
-        match stream {
-            Ok(mut stream) => {
-                // let _res = stream.set_nonblocking(true).unwrap();
-                println!("accepted new connection");
+//         let mut data_response = http::Response::new(" ".to_string());
+//         let err_response = http::Response::builder()
+//             .status(404)
+//             .body("Invalid request".to_string())
+//             .unwrap();
 
-                let mut buffered_stream = BufReader::new(&stream);
+//         match stream {
+//             Ok(mut stream) => {
+//                 // let _res = stream.set_nonblocking(true).unwrap();
+//                 println!("accepted new connection");
 
-                let mut data_ingest: Vec<String> = buffered_stream
-                    .lines()
-                    .map(|line| line.unwrap())
-                    .take_while(|line| !line.is_empty())
-                    .collect();
+//                 let mut buffered_stream = BufReader::new(&stream);
 
-                println!("moving forward: {:?}", buf);
+//                 let mut data_ingest: Vec<String> = buffered_stream
+//                     .lines()
+//                     .map(|line| line.unwrap())
+//                     .take_while(|line| !line.is_empty())
+//                     .collect();
 
-                let (mut request_obj, mut header_obj) =
-                    match split_request_headers_data(data_ingest) {
-                        Ok((req, header)) => {
-                            println!("connection succeded");
-                            println!("request: {:?} \n header: {:#?}", req, header);
-                            (req, header)
-                        }
-                        Err(err) => {
-                            let err = stream
-                                .write(response_to_raw_string(err_response.clone()).as_bytes())
-                                .unwrap();
-                            continue 'listener;
-                        }
-                    };
+//                 println!("moving forward: {:?}", buf);
 
-                let path = request_obj.resource_path().to_string();
-                match path {
-                    val if val == "/index.html".to_string() || val == "/".to_string() => {
-                        println!("path accepted");
-                        let resp_data = response_to_raw_string(data_response.clone());
-                        let err = stream.write(resp_data.as_bytes()).unwrap();
-                    }
+//                 let (mut request_obj, mut header_obj) =
+//                     match split_request_headers_data(data_ingest) {
+//                         Ok((req, header)) => {
+//                             println!("connection succeded");
+//                             println!("request: {:?} \n header: {:#?}", req, header);
+//                             (req, header)
+//                         }
+//                         Err(err) => {
+//                             let err = stream
+//                                 .write(response_to_raw_string(err_response.clone()).as_bytes())
+//                                 .unwrap();
+//                             continue 'listener;
+//                         }
+//                     };
 
-                    val if val.contains("/echo") => {
-                        println!("echo accepted");
-                        let mut resp_body = val
-                            .rsplitn(2, "/")
-                            .map(String::from)
-                            .collect::<Vec<String>>()
-                            .remove(0);
+//                 let path = request_obj.resource_path().to_string();
+//                 match path {
+//                     val if val == "/index.html".to_string() || val == "/".to_string() => {
+//                         println!("path accepted");
+//                         let resp_data = response_to_raw_string(data_response.clone());
+//                         let err = stream.write(resp_data.as_bytes()).unwrap();
+//                     }
 
-                        *data_response.body_mut() = resp_body;
+//                     val if val.contains("/echo") => {
+//                         println!("echo accepted");
+//                         let mut resp_body = val
+//                             .rsplitn(2, "/")
+//                             .map(String::from)
+//                             .collect::<Vec<String>>()
+//                             .remove(0);
 
-                        let resp_data = response_to_raw_string(data_response.clone());
+//                         *data_response.body_mut() = resp_body;
 
-                        let err = stream.write(resp_data.as_bytes()).unwrap();
-                    }
+//                         let resp_data = response_to_raw_string(data_response.clone());
 
-                    val if val.contains("/user-agent") => {
-                        println!(" user agent accepted");
+//                         let err = stream.write(resp_data.as_bytes()).unwrap();
+//                     }
 
-                        let header_value = header_obj.remove(&objects::HeaderName::USER_AGENT);
+//                     val if val.contains("/user-agent") => {
+//                         println!(" user agent accepted");
 
-                        let header_string =
-                            if let Some(objects::HeaderValue::string(val)) = header_value {
-                                val
-                            } else {
-                                "none".to_string()
-                            };
+//                         let header_value = header_obj.remove(&objects::HeaderName::USER_AGENT);
 
-                        *data_response.body_mut() = header_string; 
+//                         let header_string =
+//                             if let Some(objects::HeaderValue::string(val)) = header_value {
+//                                 val
+//                             } else {
+//                                 "none".to_string()
+//                             };
 
-                        let resp_data = response_to_raw_string(data_response.clone());
-                        let err = stream.write(resp_data.as_bytes()).unwrap();
-                    }
-                    _ => {
-                        println!("invalid path");
-                        let err = stream
-                            .write(
-                                response_to_raw_string(err_response.clone())
-                                    .to_string()
-                                    .as_bytes(),
-                            )
-                            .unwrap();
-                    }
-                }
-            }
+//                         *data_response.body_mut() = header_string; 
 
-            Err(e) => {
-                println!("error: {}", e);
-            }
-        }
-    }
-}
+//                         let resp_data = response_to_raw_string(data_response.clone());
+//                         let err = stream.write(resp_data.as_bytes()).unwrap();
+//                     }
+//                     _ => {
+//                         println!("invalid path");
+//                         let err = stream
+//                             .write(
+//                                 response_to_raw_string(err_response.clone())
+//                                     .to_string()
+//                                     .as_bytes(),
+//                             )
+//                             .unwrap();
+//                     }
+//                 }
+//             }
+
+//             Err(e) => {
+//                 println!("error: {}", e);
+//             }
+//         }
+//     }
+// }
 
 fn split_request_headers_data(mut data: Vec<String>) -> Result<(Request, HeaderMap), String> {
     // let mut data_iterator = data.splitn(2, std::str::from_utf8(b"\r\n").unwrap());
@@ -173,4 +177,127 @@ fn response_to_raw_string(mut response: http::Response<String>) -> String {
         body.len(),
         body
     )
+}
+
+#[tokio::main]
+async fn main() {
+
+    let mut listener = TcpListener::bind("127.0.0.1:4221").await.unwrap(); 
+    let mut counter = 0; 
+
+    'listener: while let Ok((tcpstream, addr)) = listener.accept().await { 
+        println!(" Thread handle : {counter}");
+        counter += 1; 
+        let (mut data_response, mut err_response) = (create_data_response(), create_err_response()); 
+
+        let _handle = tokio::spawn(async move { 
+            
+            let mut buffered_stream = BufStream::new(tcpstream); 
+
+            let mut data_ingest = {
+
+                let mut vec_string = vec![]; 
+                let mut line_data = &mut buffered_stream; 
+                let mut buf = "".to_string(); 
+
+                while let Ok(_val) = line_data.read_line(&mut buf).await { 
+                    if buf.as_bytes() == b"\r\n" {
+                        break; 
+                    }
+                    vec_string.push(buf.clone()); 
+                    buf.clear(); 
+                }
+                vec_string
+            };
+
+            let (mut request_obj, mut header_obj) = match split_request_headers_data(data_ingest) {
+                Ok((req, header)) => {
+                    println!("connection succeded");
+                    println!("request: {:?} \n header: {:#?}", req, header);
+                    (req, header)
+                }
+                Err(err) => {
+                    let err = buffered_stream
+                        .write(response_to_raw_string(err_response.clone()).as_bytes())
+                        .await
+                        .unwrap();
+                    return;
+                }
+            };
+
+            let path = request_obj.resource_path().to_string();
+
+            match path {
+
+                val if val == "/index.html".to_string() || val == "/".to_string() => {
+                    println!("path accepted");
+                    let resp_data = response_to_raw_string(data_response.clone());
+                    let err = buffered_stream.write(resp_data.as_bytes()).await.unwrap();
+                }
+
+                val if val.contains("/echo") => {
+                    println!("echo accepted");
+
+                    let mut resp_body = val
+                        .rsplitn(2, "/")
+                        .map(String::from)
+                        .collect::<Vec<String>>()
+                        .remove(0);
+
+                    *data_response.body_mut() = resp_body;
+
+                    let resp_data = response_to_raw_string(data_response.clone());
+
+                    let err = buffered_stream.write(resp_data.as_bytes()).await.unwrap();
+                }
+
+                val if val.contains("/user-agent") => {
+                    println!(" user agent accepted");
+
+                    let header_value = header_obj.remove(&objects::HeaderName::USER_AGENT);
+
+                    let header_string =
+                        if let Some(objects::HeaderValue::string(val)) = header_value {
+                            val
+                        } else {
+                            "none".to_string()
+                        };
+
+                    *data_response.body_mut() = header_string; 
+
+                    let resp_data = response_to_raw_string(data_response.clone());
+                    let err = buffered_stream.write(resp_data.as_bytes()).await.unwrap();
+                }
+                _ => {
+                    println!("invalid path");
+                    let err = buffered_stream
+                        .write(
+                            response_to_raw_string(err_response.clone())
+                                .to_string()
+                                .as_bytes(),
+                        )
+                        .await
+                        .unwrap();
+                }
+            }
+            let _t = buffered_stream.flush().await; 
+        }
+
+        );
+
+
+    }
+}
+
+fn create_data_response() -> http::Response<String> { 
+    http::Response::new(" ".to_string())
+}
+
+fn create_err_response() -> http::Response<String> { 
+    // http::Response::new(" ".to_string())
+    let err_response = http::Response::builder()
+            .status(404)
+            .body("Invalid request".to_string())
+            .unwrap();
+    err_response
 }
