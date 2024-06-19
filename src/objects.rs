@@ -1,4 +1,4 @@
-use http::Uri;
+use http::{HeaderMap, HeaderName, HeaderValue, Uri};
 use std::{collections::HashMap, str::FromStr};
 use string_enum::StringEnum;
 
@@ -6,22 +6,70 @@ use crate::error::{HeaderError, HttpRequestError};
 
 #[derive(Debug)]
 pub struct HttpRequest {
-    request: Request,
-    headers: HeaderMap,
+    pub request: Request,
+    pub headers: HeaderMap,
+}
+
+impl HttpRequest {
+    pub fn get_req_ref(&self) -> &Request {
+        &self.request
+    }
+
+    pub fn get_headers_ref(&self) -> &HeaderMap {
+        &self.headers
+    }
+
+    pub fn get_headers_mut(&mut self) -> &mut HeaderMap {
+        &mut self.headers
+    }
+
+    pub fn get_req_mut(&mut self) -> &mut Request {
+        &mut self.request
+    }
+
+    pub fn from_string_line_collection(
+        mut data: Vec<String>,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync + 'static>> {
+        let mut data_iterator = data.into_iter();
+
+        let request_data = data_iterator
+            .next()
+            .ok_or("Request data not found".to_string())?;
+
+        println!("1: {:?}", request_data);
+
+        let request = Request::from_str(&request_data).map_err(|val| format!("{:?}", val))?;
+
+        let mut headermap = HeaderMap::default();
+
+        for line in data_iterator {
+            let mut splitter = line.splitn(2, ":");
+            let header = splitter.next().ok_or(HeaderError::InvalidHeaderName)?;
+            let value = splitter
+                .next()
+                .ok_or(HeaderError::InvalidHeaderValue)?
+                .trim();
+            let _y = headermap.insert(
+                HeaderName::from_str(header).unwrap(),
+                HeaderValue::from_str(value).unwrap(),
+            );
+        }
+
+        Ok(Self {
+            request: request,
+            headers: headermap,
+        })
+    }
 }
 
 #[derive(Debug)]
 pub struct Request {
     method: Method,
-    // target: String,
     uri: Uri,
     version: HTTPVersion,
 }
 
 impl Request {
-    // pub fn compare_resource_path(&self, path: impl AsRef<str>) -> bool {
-    //     self.target == path.as_ref()
-    // }
     pub fn resource_path(&self) -> &str {
         self.uri.path()
     }
@@ -37,6 +85,7 @@ impl FromStr for Request {
             .next()
             .ok_or(HttpRequestError::InvalidTarget)?
             .to_string();
+
         let uri = Uri::from_str(&uri_string).map_err(|_| HttpRequestError::InvalidTarget)?;
         let version_value = broken_data.next().ok_or(HttpRequestError::InvalidVersion)?;
         // let version = HTTPVersion::from_str(version_value).map_err(|v| HttpRequestError::InvalidVersion)?;
@@ -69,103 +118,15 @@ enum HTTPVersion {
     HTTP2,
 }
 
-// /===========================================
-#[derive(Debug)]
-pub struct HeaderMap {
-    headerfields: HashMap<HeaderName, HeaderValue>,
+pub fn create_data_response() -> http::Response<String> {
+    http::Response::new(" ".to_string())
 }
 
-impl std::ops::Deref for HeaderMap {
-    type Target = HashMap<HeaderName, HeaderValue>;
-    fn deref(&self) -> &Self::Target {
-        &self.headerfields
-    }
-}
-
-impl std::ops::DerefMut for HeaderMap {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.headerfields
-    }
-}
-
-impl HeaderMap {
-    pub fn from_line(&mut self, string_line: String) -> Result<(), HeaderError> {
-        let mut splitter = string_line.splitn(2, ":");
-
-        let header = splitter.next().ok_or(HeaderError::InvalidHeaderName)?;
-        let value = splitter.next().ok_or(HeaderError::InvalidHeaderValue)?.trim();
-
-        let headername =
-            HeaderName::from_str(header).map_err(|val| HeaderError::InvalidHeaderName)?;
-        let headervalue = HeaderValue::string(value.to_string());
-
-        self.headerfields.insert(headername, headervalue);
-
-        Ok(())
-    }
-}
-
-impl std::default::Default for HeaderMap {
-    fn default() -> Self {
-        Self {
-            headerfields: HashMap::new(),
-        }
-    }
-}
-
-impl FromStr for HeaderMap {
-    type Err = HeaderError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut hm = HashMap::new();
-        let mut field_iter = s.split(std::str::from_utf8(b"\n").unwrap());
-
-        for fields in field_iter {
-            let (header, value) = {
-                let mut splitter = fields.split(":");
-
-                let header = if let Some(header) = splitter.next() {
-                    // println!(" header: {:?}", header);
-                    header
-                } else {
-                    continue;
-                };
-
-                let value = if let Some(value) = splitter.next() {
-                    // println!("value: {:?}", value);
-                    value
-                } else {
-                    continue;
-                };
-
-                (header, value)
-            };
-
-            let headername = HeaderName::from_str(header).unwrap();
-            let headervalue = HeaderValue::string(value.to_string());
-
-            hm.insert(headername, headervalue);
-        }
-
-        Ok(Self { headerfields: hm })
-    }
-}
-
-#[derive(StringEnum, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum HeaderName {
-    /// `CONTENT_TYPE`
-    CONTENT_TYPE,
-    /// `CONTENT_LENGTH`
-    CONTENT_LENGTH,
-    /// `Accept`
-    ACCEPT,
-    /// `User-Agent`
-    USER_AGENT,
-    /// `Host`
-    HOST,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum HeaderValue {
-    string(String),
-    bytes(Vec<u8>),
+pub fn create_err_response() -> http::Response<String> {
+    // http::Response::new(" ".to_string())
+    let err_response = http::Response::builder()
+        .status(404)
+        .body("Invalid request".to_string())
+        .unwrap();
+    err_response
 }
