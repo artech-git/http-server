@@ -1,4 +1,4 @@
-use http::{HeaderMap, HeaderName, HeaderValue, Uri};
+use http::{header::{ACCEPT_ENCODING, CONTENT_ENCODING}, HeaderMap, HeaderName, HeaderValue, Uri};
 use std::{collections::HashMap, str::FromStr};
 use string_enum::StringEnum;
 
@@ -134,15 +134,53 @@ enum HTTPVersion {
     HTTP2,
 }
 
-pub fn create_data_response() -> http::Response<String> {
-    http::Response::new(" ".to_string())
+pub fn create_data_response(req: &HeaderMap) -> http::Response<Vec<u8>> {
+
+    let mut res = http::Response::new(vec![]);
+
+    if let Some(val) = req.get(ACCEPT_ENCODING) {
+        if let Some(encoding) = ServerEncoding::get_header_encoding(val) {
+            res.headers_mut().insert(CONTENT_ENCODING, encoding.into_header());
+        }
+    }
+    res
 }
 
-pub fn create_err_response() -> http::Response<String> {
+pub fn create_err_response(req: &HeaderMap) -> http::Response<Vec<u8>> {
     // http::Response::new(" ".to_string())
-    let err_response = http::Response::builder()
+    let mut err_response = http::Response::builder()
         .status(404)
-        .body("Invalid request".to_string())
+        .body("Invalid request".as_bytes().to_vec())
         .unwrap();
+    if let Some(val) = req.get(ACCEPT_ENCODING) {
+        if let Some(encoding) = ServerEncoding::get_header_encoding(val) {
+            err_response.headers_mut().insert(CONTENT_ENCODING, encoding.into_header());
+        }
+    }
     err_response
+}
+
+#[derive(StringEnum )]
+pub enum ServerEncoding {
+    /// `gzip`
+    GZIP, 
+    // Invalid 
+}
+
+// type EncoderForamt = impl FnOnce(Vec<u8>) -> Vec<u8>;
+
+impl ServerEncoding { 
+    pub fn return_encoder(&self, buffer: Vec<u8>) -> Vec<u8> { 
+        todo!()
+    }
+    pub fn get_header_encoding(headervalue: &HeaderValue) -> Option<Self> { 
+        let header_name_string = headervalue.to_str().unwrap(); 
+        if let Ok(val) = Self::from_str(&header_name_string) { 
+            return Some(val); 
+        }
+        return None; 
+    }
+    pub fn into_header(self) -> HeaderValue { 
+        HeaderValue::from_static(self.as_str())
+    }
 }
