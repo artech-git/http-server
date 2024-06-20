@@ -139,8 +139,12 @@ pub fn create_data_response(req: &HeaderMap) -> http::Response<Vec<u8>> {
     let mut res = http::Response::new(vec![]);
 
     if let Some(val) = req.get(ACCEPT_ENCODING) {
-        if let Some(encoding) = ServerEncoding::get_header_encoding(val) {
-            res.headers_mut().insert(CONTENT_ENCODING, encoding.into_header());
+        let mut encoded_list = val.to_str().unwrap().split(",").map(|val| val.trim().to_string()).collect::<Vec<String>>();
+        println!(" \n encoded list: {:#?} \n", encoded_list); 
+        for encode_name in encoded_list {
+            if let Ok(encoding) = ServerEncoding::from_str(&encode_name) {
+                res.headers_mut().insert(CONTENT_ENCODING, encoding.into_header());
+            }
         }
     }
     res
@@ -153,8 +157,12 @@ pub fn create_err_response(req: &HeaderMap) -> http::Response<Vec<u8>> {
         .body("Invalid request".as_bytes().to_vec())
         .unwrap();
     if let Some(val) = req.get(ACCEPT_ENCODING) {
-        if let Some(encoding) = ServerEncoding::get_header_encoding(val) {
-            err_response.headers_mut().insert(CONTENT_ENCODING, encoding.into_header());
+        let mut encoded_list = val.to_str().unwrap().split(",").map(|val| val.trim().to_string()).collect::<Vec<String>>();
+        println!(" \n encoded list: {:#?} \n", encoded_list); 
+        for encode_name in encoded_list {
+            if let Ok(encoding) = ServerEncoding::from_str(&encode_name) {
+                err_response.headers_mut().insert(CONTENT_ENCODING, encoding.into_header());
+            }
         }
     }
     err_response
@@ -182,5 +190,13 @@ impl ServerEncoding {
     }
     pub fn into_header(self) -> HeaderValue { 
         HeaderValue::from_static(self.as_str())
+    }
+    pub fn select_valid_encoding(list: Vec<String>) -> Option<Self> {
+        for encoding in list { 
+            if let Ok(val) = Self::from_str(&encoding) {
+                return Some(val);
+            }
+        }
+        return None; 
     }
 }
