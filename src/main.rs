@@ -5,9 +5,9 @@ use std::str::FromStr;
 use clap::{arg, value_parser, Command};
 use handlers::{
     convert_stream_to_lines, get_path_name, process_buffer_to_response_buffer, read_file_to_buffer,
-    response_raw_vec, response_to_raw_string, search_file_path,
+    response_raw_vec, response_to_raw_string, search_file_path, write_buffer_to_file,
 };
-use http::HeaderValue;
+use http::{HeaderValue, StatusCode};
 use objects::{create_data_response, create_err_response, HttpRequest};
 use tokio::net::TcpListener;
 mod error;
@@ -53,6 +53,8 @@ async fn main() {
 
             let data_ingest = convert_stream_to_lines(&mut buffered_stream).await;
 
+            println!("Raw data: {:?}", data_ingest);
+
             let mut request_object = match HttpRequest::from_string_line_collection(data_ingest) {
                 Ok(req_obj) => {
                     println!("request parsed into lines");
@@ -75,7 +77,29 @@ async fn main() {
             let path = request_object.get_req_ref().resource_path().to_string();
 
             match path {
-                val if val.contains("/file") => {
+                
+                val if (val.contains("/file") && *request_object.get_req_ref().get_method() == objects::Method::POST) => { 
+                    println!("upload req accepted");
+
+                    let file_name = get_path_name(val); 
+
+                    let buffer_content = request_object.get_body_content().as_bytes().to_vec(); 
+                    let res = write_buffer_to_file(cloned_curr_dir, PathBuf::from(file_name), buffer_content).await; 
+
+                    let response = if let Ok(_) = res { 
+                        let mut res = create_data_response();
+                        *res.status_mut() = StatusCode::from_u16(201).unwrap(); 
+                        res
+                    }
+                    else { 
+                        create_err_response()
+                    };
+
+                    let buffer  = response_to_raw_string(response).as_bytes().to_vec(); 
+                    let err = buffered_stream.write(&buffer).await.unwrap();
+                }
+
+                val if (val.contains("/file") && *request_object.get_req_ref().get_method() == objects::Method::GET) => {
                     println!("file accepted");
 
                     let file_name = get_path_name(val);

@@ -8,6 +8,7 @@ use crate::error::{HeaderError, HttpRequestError};
 pub struct HttpRequest {
     pub request: Request,
     pub headers: HeaderMap,
+    pub body: String
 }
 
 impl HttpRequest {
@@ -27,6 +28,10 @@ impl HttpRequest {
         &mut self.request
     }
 
+    pub fn get_body_content(&self) -> &String {
+        &self.body
+    }
+
     pub fn from_string_line_collection(
         mut data: Vec<String>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync + 'static>> {
@@ -41,8 +46,15 @@ impl HttpRequest {
         let request = Request::from_str(&request_data).map_err(|val| format!("{:?}", val))?;
 
         let mut headermap = HeaderMap::default();
+        let mut body_data = "".to_string(); 
 
-        for line in data_iterator {
+        while let Some(line) = (&mut data_iterator).next() {
+
+            if line.is_empty() { 
+                body_data = (&mut data_iterator).next().unwrap(); 
+                continue;     
+            }
+
             let mut splitter = line.splitn(2, ":");
             let header = splitter.next().ok_or(HeaderError::InvalidHeaderName)?;
             let value = splitter
@@ -58,6 +70,7 @@ impl HttpRequest {
         Ok(Self {
             request: request,
             headers: headermap,
+            body: body_data
         })
     }
 }
@@ -70,6 +83,9 @@ pub struct Request {
 }
 
 impl Request {
+    pub fn get_method(&self) -> &Method {
+        &self.method
+    }
     pub fn resource_path(&self) -> &str {
         self.uri.path()
     }
@@ -98,8 +114,8 @@ impl FromStr for Request {
     }
 }
 
-#[derive(StringEnum)]
-enum Method {
+#[derive(StringEnum, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Method {
     /// `GET`
     GET,
     /// `POST`
