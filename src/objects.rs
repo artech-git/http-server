@@ -1,5 +1,6 @@
+use flate2::write::GzEncoder;
 use http::{header::{ACCEPT_ENCODING, CONTENT_ENCODING}, HeaderMap, HeaderName, HeaderValue, Uri};
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, io::Write, str::FromStr};
 use string_enum::StringEnum;
 
 use crate::error::{HeaderError, HttpRequestError};
@@ -41,7 +42,7 @@ impl HttpRequest {
             .next()
             .ok_or("Request data not found".to_string())?;
 
-        println!("1: {:?}", request_data);
+        //println!("1: {:?}", request_data);
 
         let request = Request::from_str(&request_data).map_err(|val| format!("{:?}", val))?;
 
@@ -140,7 +141,7 @@ pub fn create_data_response(req: &HeaderMap) -> http::Response<Vec<u8>> {
 
     if let Some(val) = req.get(ACCEPT_ENCODING) {
         let mut encoded_list = val.to_str().unwrap().split(",").map(|val| val.trim().to_string()).collect::<Vec<String>>();
-        println!(" \n encoded list: {:#?} \n", encoded_list); 
+        //println!(" \n encoded list: {:#?} \n", encoded_list); 
         for encode_name in encoded_list {
             if let Ok(encoding) = ServerEncoding::from_str(&encode_name) {
                 res.headers_mut().insert(CONTENT_ENCODING, encoding.into_header());
@@ -158,7 +159,7 @@ pub fn create_err_response(req: &HeaderMap) -> http::Response<Vec<u8>> {
         .unwrap();
     if let Some(val) = req.get(ACCEPT_ENCODING) {
         let mut encoded_list = val.to_str().unwrap().split(",").map(|val| val.trim().to_string()).collect::<Vec<String>>();
-        println!(" \n encoded list: {:#?} \n", encoded_list); 
+        //println!(" \n encoded list: {:#?} \n", encoded_list); 
         for encode_name in encoded_list {
             if let Ok(encoding) = ServerEncoding::from_str(&encode_name) {
                 err_response.headers_mut().insert(CONTENT_ENCODING, encoding.into_header());
@@ -177,9 +178,31 @@ pub enum ServerEncoding {
 
 // type EncoderForamt = impl FnOnce(Vec<u8>) -> Vec<u8>;
 
+use flate2::Compression;
+
 impl ServerEncoding { 
-    pub fn return_encoder(&self, buffer: Vec<u8>) -> Vec<u8> { 
-        todo!()
+    pub fn process_encoding(&self, buffer: &Vec<u8>) -> Vec<u8> { 
+        // todo!()\
+        match self { 
+            Self::GZIP => { 
+                            // Create a GzEncoder with the desired compression level
+                let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+
+                // Write the data to the encoder
+                let _res = encoder.write_all(buffer).unwrap();
+
+                // Finish the compression process and get the compressed data
+                let compressed_data = encoder.finish().unwrap();
+
+                // Print the compressed data
+                //println!("Compressed data: {:?}", compressed_data);
+                compressed_data
+
+            }
+            _ => {
+                buffer.to_owned()
+            }
+        }
     }
     pub fn get_header_encoding(headervalue: &HeaderValue) -> Option<Self> { 
         let header_name_string = headervalue.to_str().unwrap(); 

@@ -1,14 +1,15 @@
-use std::{ffi::OsString, path::PathBuf};
+use std::{ffi::OsString, path::PathBuf, str::FromStr};
 
-use http::{header::CONTENT_TYPE, HeaderValue};
+use http::{header::{CONTENT_ENCODING, CONTENT_TYPE}, HeaderValue};
+use itertools::Itertools;
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufStream, BufWriter},
     net::TcpStream,
 };
 
-use crate::objects::create_data_response;
+use crate::objects::{create_data_response, ServerEncoding};
 
-pub fn response_raw_vec(mut response: http::Response<Vec<u8>>) -> String {
+pub fn response_raw_vec(mut response: http::Response<Vec<u8>>) -> Vec<u8> {
     // Extract the status line
     let status_line = format!(
         "{:?} {} {}\r\n",
@@ -32,17 +33,44 @@ pub fn response_raw_vec(mut response: http::Response<Vec<u8>>) -> String {
         .map(|(key, value)| format!("{}: {}\r\n", key, value.to_str().unwrap_or("")))
         .collect::<String>();
 
-    // Extract the body
-    let body = response.body();
+    let encoding_header_check = response.headers().get(CONTENT_ENCODING);
 
+    if let Some(val) = encoding_header_check {
+        let header_string = val.to_str().unwrap();
+        let server_encoding = ServerEncoding::from_str(header_string).unwrap(); 
+        // Extract the body
+        let body = response.body();
+        let compressed_body = server_encoding.process_encoding(body);
+
+        let len = compressed_body.len();
+
+        let mut request_part = format!(
+            "{}{}Content-Length: {}\r\n\r\n",
+            status_line,
+            headers,
+            len,
+        )
+        .as_bytes()
+        .to_vec();
+
+        request_part.extend(compressed_body);
+
+        return request_part; 
+    }
+    else {
+        
+        let body = response.body();
+
+        return format!(
+            "{}{}Content-Length: {}\r\n\r\n{}",
+            status_line,
+            headers,
+            body.len(),
+            std::str::from_utf8(body).unwrap()
+        ).as_bytes().to_vec();
+    };
     // Combine the status line, headers, and body into a raw HTTP response string
-    format!(
-        "{}{}Content-Length: {}\r\n\r\n{}",
-        status_line,
-        headers,
-        body.len(),
-        std::str::from_utf8(body).unwrap()
-    )
+    
 }
 
 pub fn response_to_raw_string(mut response: http::Response<String>) -> String {
@@ -99,7 +127,7 @@ pub async fn search_file_path(
     let mut dir_entry = tokio::fs::read_dir(&(dir.into())).await.unwrap();
     let mut filename = filename.into();
     while let Ok(Some(val)) = dir_entry.next_entry().await {
-        println!("val: {:?}", val.path());
+        //println!("val: {:?}", val.path());
 
         if val.file_name() == filename {
             return Ok(val.path().to_path_buf());
@@ -115,13 +143,13 @@ pub async fn read_file_to_buffer(path: PathBuf) -> Result<Vec<u8>, ()> {
 
     match file {
         Ok(mut file_open) => {
-            println!("File found: ");
+            //println!("File found: ");
 
             let _res = file_open.read_to_end(&mut file_buffer).await;
             return Ok(file_buffer);
         }
         Err(err) => {
-            println!("File not found");
+            //println!("File not found");
             return Err(());
         }
     }
@@ -130,7 +158,7 @@ pub async fn read_file_to_buffer(path: PathBuf) -> Result<Vec<u8>, ()> {
 pub async fn process_buffer_to_response_buffer(buffer: Vec<u8>) -> Vec<u8> {
     let mut data_body = http::Response::default();
     *data_body.body_mut() = buffer;
-    let parsed_bytes = response_raw_vec(data_body).as_bytes().to_vec();
+    let parsed_bytes = response_raw_vec(data_body);
 
     parsed_bytes
 }
@@ -164,10 +192,10 @@ pub async fn convert_stream_to_lines(mut stream: &mut BufStream<TcpStream>) -> V
 
     // while let result = stream.read_line(&mut buf).await {
     //     if result.is_err() { 
-    //         println!("err");
+    //         //println!("err");
     //     }
     //     //TODO: change this to even parse and read the body content of a Request
-    //     println!("buf: {:?}", buf); 
+    //     //println!("buf: {:?}", buf); 
     //     // if val == 0 {
     //     //     break;
     //     // }
@@ -192,13 +220,13 @@ pub async fn convert_stream_to_lines(mut stream: &mut BufStream<TcpStream>) -> V
         match stream.try_read(&mut buf) {
             Ok(0) => break,
             Ok(n) => {
-                println!("read {} bytes", n);
+                //println!("read {} bytes", n);
                 // absolute_buffer.extend_from_slice(&buf); 
                 buf.retain(|val| val != &('\0' as u8) );
                 large_string.push_str(&String::from_utf8_lossy(&buf));
             }
             Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                println!("blocked");
+                //println!("blocked");
                 break;
             }
             Err(e) => {
@@ -230,6 +258,6 @@ pub async fn convert_stream_to_lines(mut stream: &mut BufStream<TcpStream>) -> V
     
     vec_string = splitted_request_lines;
 
-    println!("vec strings: {:#?}", vec_string); 
+    //println!("vec strings: {:#?}", vec_string); 
     vec_string
 }

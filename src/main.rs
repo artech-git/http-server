@@ -40,10 +40,10 @@ async fn main() {
         .get_one::<PathBuf>("directory")
         .unwrap_or(&PathBuf::from("./"))
         .to_owned();
-    println!("dir: {:?}", curr_dir);
+    //println!("dir: {:?}", curr_dir);
 
     while let Ok((tcpstream, addr)) = listener.accept().await {
-        println!(" Thread handle : {counter}");
+        //println!(" Thread handle : {counter}");
         counter += 1;
 
         let cloned_curr_dir = (&curr_dir).clone();
@@ -53,16 +53,16 @@ async fn main() {
 
             let data_ingest = convert_stream_to_lines(&mut buffered_stream).await;
 
-            println!("Raw data: {:?}", data_ingest);
+            //println!("Raw data: {:?}", data_ingest);
 
             let mut request_object = match HttpRequest::from_string_line_collection(data_ingest) {
                 Ok(req_obj) => {
-                    println!("request parsed into lines");
-                    println!(
-                        "request: {:?} \n headers: {:#?}",
-                        req_obj.get_req_ref(),
-                        req_obj.get_headers_ref()
-                    );
+                    //println!("request parsed into lines");
+                    //println!(
+                        // "request: {:?} \n headers: {:#?}",
+                        // req_obj.get_req_ref(),
+                        // req_obj.get_headers_ref()
+                    // );
                     req_obj
                 }
                 Err(err) => {
@@ -79,7 +79,7 @@ async fn main() {
             match path {
                 
                 val if (val.contains("/file") && *request_object.get_req_ref().get_method() == objects::Method::POST) => { 
-                    println!("upload req accepted");
+                    //println!("upload req accepted");
 
                     let file_name = get_path_name(val); 
 
@@ -95,12 +95,12 @@ async fn main() {
                         create_err_response(request_object.get_headers_ref())
                     };
 
-                    let buffer  = response_raw_vec(response).as_bytes().to_vec(); 
+                    let buffer  = response_raw_vec(response); 
                     let err = buffered_stream.write(&buffer).await.unwrap();
                 }
 
                 val if (val.contains("/file") && *request_object.get_req_ref().get_method() == objects::Method::GET) => {
-                    println!("file accepted");
+                    //println!("file accepted");
 
                     let file_name = get_path_name(val);
 
@@ -114,36 +114,36 @@ async fn main() {
                                 let mut data_body = http::Response::default();
                                 *data_body.body_mut() = val;
                                 data_body.headers_mut().insert(http::header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream"));
-                                let parsed_bytes = response_raw_vec(data_body).as_bytes().to_vec();
+                                let parsed_bytes = response_raw_vec(data_body);
 
                                 parsed_bytes
                             }
                             Err(err) => {
                                 let err_response = create_err_response(request_object.get_headers_ref());
-                                response_raw_vec(err_response).as_bytes().to_vec()
+                                response_raw_vec(err_response)
                             }
                         }
                     } else {
                         let err_response = create_err_response(request_object.get_headers_ref());
-                        response_raw_vec(err_response).as_bytes().to_vec()
+                        response_raw_vec(err_response)
                     };
 
                     let err = buffered_stream.write(&buffer).await.unwrap();
                 }
                 val if val == "/index.html".to_string() || val == "/".to_string() => {
-                    println!("path accepted");
+                    //println!("path accepted");
                     let resp_data = response_raw_vec(create_data_response(request_object.get_headers_ref()));
-                    let err = buffered_stream.write(resp_data.as_bytes()).await.unwrap();
+                    let err = buffered_stream.write(&resp_data).await.unwrap();
                 }
                 val if val.contains("/echo") => {
-                    println!("echo accepted");
+                    //println!("echo accepted");
 
                     let mut resp_body = get_path_name(val).as_bytes().to_vec();
                     // let data_response = process_buffer_to_response_buffer(resp_body).await;
                     let data_response = {
                         let mut data_body = create_data_response(request_object.get_headers_ref());
                         *data_body.body_mut() = resp_body;
-                        let parsed_bytes = response_raw_vec(data_body).as_bytes().to_vec();
+                        let parsed_bytes = response_raw_vec(data_body);
 
                         parsed_bytes
                     };
@@ -151,7 +151,7 @@ async fn main() {
                     let err = buffered_stream.write(&data_response).await.unwrap();
                 }
                 val if val.contains("/user-agent") => {
-                    println!(" user agent accepted");
+                    //println!(" user agent accepted");
 
                     //TODO: ensure this user-agent header parsing is correct ?
                     let user_agent_header = http::HeaderName::from_str("user-agent").unwrap();
@@ -170,7 +170,7 @@ async fn main() {
                     let buffer = { 
                         let mut data_body = create_data_response(request_object.get_headers_ref());
                         *data_body.body_mut() = header_value.as_bytes().to_vec();
-                        let parsed_bytes = response_raw_vec(data_body).as_bytes().to_vec();
+                        let parsed_bytes = response_raw_vec(data_body);
 
                         parsed_bytes
                     };
@@ -178,10 +178,10 @@ async fn main() {
                     let err = buffered_stream.write(&buffer).await.unwrap();
                 }
                 _ => {
-                    println!("invalid path");
+                    //println!("invalid path");
                     let err_response = create_err_response(request_object.get_headers_ref());
                     let _err = buffered_stream
-                        .write(response_raw_vec(err_response).as_bytes())
+                        .write(&response_raw_vec(err_response))
                         .await
                         .unwrap();
                 }
