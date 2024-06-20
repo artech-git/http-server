@@ -111,8 +111,12 @@ async fn main() {
                     {
                         match read_file_to_buffer(val).await {
                             Ok(val) => {
-                                let processed_bytes = process_buffer_to_response_buffer(val).await;
-                                processed_bytes
+                                let mut data_body = http::Response::default();
+                                *data_body.body_mut() = val;
+                                data_body.headers_mut().insert(http::header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream"));
+                                let parsed_bytes = response_raw_vec(data_body).as_bytes().to_vec();
+
+                                parsed_bytes
                             }
                             Err(err) => {
                                 let err_response = create_err_response();

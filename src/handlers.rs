@@ -17,10 +17,14 @@ pub fn response_raw_vec(mut response: http::Response<Vec<u8>>) -> String {
         response.status().canonical_reason().unwrap_or("")
     );
 
-    response.headers_mut().insert(
-        CONTENT_TYPE,
-        HeaderValue::from_static("application/octet-stream"),
-    );
+    // let value = response.headers_mut().entry(
+    //     CONTENT_TYPE,
+    // ).or_insert(HeaderValue::from_static("application/octet-stream"));
+    
+    if let None = response.headers_mut().get(CONTENT_TYPE) { 
+        response.headers_mut().insert(CONTENT_TYPE,HeaderValue::from_static("text/plain"));
+    
+    }
     // Extract headers
     let headers = response
         .headers()
@@ -50,9 +54,15 @@ pub fn response_to_raw_string(mut response: http::Response<String>) -> String {
         response.status().canonical_reason().unwrap_or("")
     );
 
-    response
-        .headers_mut()
-        .insert(CONTENT_TYPE, HeaderValue::from_static("text/plain"));
+    // response
+    //     .headers_mut()
+    //     .insert(CONTENT_TYPE, HeaderValue::from_static("text/plain"));
+
+    if let None = response.headers_mut().get(CONTENT_TYPE) { 
+        response.headers_mut().insert(CONTENT_TYPE,HeaderValue::from_static("text/plain"));
+    
+    }
+
     // Extract headers
     let headers = response
         .headers()
